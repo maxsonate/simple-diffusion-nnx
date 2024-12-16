@@ -20,14 +20,11 @@ from flax import nnx
 from flax.nnx import Optimizer
 from typing import Callable
 from tqdm.notebook import tqdm
-from PIL import Image
-from IPython import display
 
 import orbax.checkpoint as ocp
 import penzai
 from penzai import pz
 import treescope
-treescope.basic_interactive_setup(autovisualize_arrays=True)
 
 
 
