@@ -1,5 +1,16 @@
 """Training file for simple diffusion model."""
 
+import jax
+from flax import nnx
+import jax.numpy as jnp
+import optax
+import orbax.checkpoint as ocp
+import tensorflow as tf
+import tensorflow_datasets as tfds
+from modules import UNet
+from tqdm import tqdm
+import jax.random as random
+
 # Prevent TFDS from using GPU
 tf.config.experimental.set_visible_devices([], 'GPU')
 
@@ -8,7 +19,46 @@ NUM_EPOCHS = 10
 BATCH_SIZE = 64
 NUM_STEPS_PER_EPOCH = 60000//BATCH_SIZE # MNIST has 60,000 training samples
 
+##################### CLEAN THIS SECTION #####################:
+timesteps = 200
+beta = jnp.linspace(0.0001, 0.02, timesteps)
+alpha = 1 - beta
+alpha_bar = jnp.cumprod(alpha, 0)
+alpha_bar = jnp.concatenate((jnp.array([1.]), alpha_bar[:-1]), axis=0)
+sqrt_alpha_bar = jnp.sqrt(alpha_bar)
+one_minus_sqrt_alpha_bar = jnp.sqrt(1 - alpha_bar)
+###############################################################
 
+ # Load MNIST dataset
+
+def get_datasets(batch_size: int):
+  # Load the MNIST dataset
+  train_ds = tfds.load('mnist', as_supervised=True, split="train")
+
+  # Normalization helper
+  def preprocess(x, y):
+    return tf.image.resize(tf.cast(x, tf.float32) / 127.5 - 1, (32, 32))
+
+  # Normalize to [-1, 1], shuffle and batch
+  train_ds = train_ds.map(preprocess, tf.data.AUTOTUNE)
+  train_ds = train_ds.shuffle(5000).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+  # Return numpy arrays instead of TF tensors while iterating
+  return tfds.as_numpy(train_ds)
+
+def forward_noising_1(key, x, t):
+  noise = jax.random.normal(key, x.shape)
+  alpha_hat_t = jnp.take(alpha_bar, t)
+  alpha_hat_t = jnp.reshape(alpha_hat_t, (-1, 1, 1, 1))
+  noisy_img = noise * jnp.sqrt(1 - alpha_hat_t) + x * jnp.sqrt(alpha_hat_t)
+  return noisy_img, noise
+
+def forward_noising_2(key, x_0, t):
+  noise = random.normal(key, x_0.shape)
+  reshaped_sqrt_alpha_bar_t = jnp.reshape(jnp.take(sqrt_alpha_bar, t), (-1, 1, 1, 1))
+  reshaped_one_minus_sqrt_alpha_bar_t = jnp.reshape(jnp.take(one_minus_sqrt_alpha_bar, t), (-1, 1, 1, 1))
+  noisy_image = reshaped_sqrt_alpha_bar_t  * x_0 + reshaped_one_minus_sqrt_alpha_bar_t  * noise
+  return noisy_image, noise
 
 # Train step:
 def loss_fn(model: UNet, noisy_image: jax.Array, noise:jax.Array, timestep: int):
@@ -96,6 +146,7 @@ def train(train_ds,
 
 
 # Enable checkpointing:
+ckpt_dir = '~/checkpoints'
 options = ocp.CheckpointManagerOptions(max_to_keep=2, create=True)
 ckpt_manager = ocp.CheckpointManager(ckpt_dir, options=options)
 # TBD: Fix loading from saved ckpt
@@ -119,6 +170,8 @@ if ckpt_manager.latest_step() is not None:
   print(f' loaded from the latest step: {latest_step}')
 
 # Initiate Training
+train_ds = get_datasets(BATCH_SIZE)
+model = UNet(out_features=32, rngs=nnx.Rngs(0), num_channels=1)
 optimizer = nnx.Optimizer(model, optax.adam(1e-4))
 trained_state = train(train_ds,
                       model,
