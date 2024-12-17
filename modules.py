@@ -190,7 +190,6 @@ class ResNetBlock(nnx.Module):
       time_embed = self.time_linear(time_embed)
       x = time_embed[:, None, None, :] + x # This is different than the main code, double check.
 
-
     x = self.conv(inputs) + x
 
     return x
