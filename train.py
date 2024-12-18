@@ -1,15 +1,15 @@
 """Training file for simple diffusion model."""
-
-import jax
 from flax import nnx
+import jax
 import jax.numpy as jnp
-import optax
+from jax import random
 import orbax.checkpoint as ocp
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from modules import UNet
 from tqdm import tqdm
-import jax.random as random
+import numpy as np
+from modules import UNet
+
 
 # Prevent TFDS from using GPU
 tf.config.experimental.set_visible_devices([], 'GPU')
@@ -32,84 +32,151 @@ one_minus_sqrt_alpha_bar = jnp.sqrt(1 - alpha_bar)
  # Load MNIST dataset
 
 def get_datasets(batch_size: int):
-  # Load the MNIST dataset
-  train_ds = tfds.load('mnist', as_supervised=True, split="train")
+    """Load the MNIST dataset"""
 
-  # Normalization helper
-  def preprocess(x, y):
-    return tf.image.resize(tf.cast(x, tf.float32) / 127.5 - 1, (32, 32))
+    train_ds = tfds.load('mnist', as_supervised=True, split="train")
 
-  # Normalize to [-1, 1], shuffle and batch
-  train_ds = train_ds.map(preprocess, tf.data.AUTOTUNE)
-  train_ds = train_ds.shuffle(5000).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    # Normalization helper
+    def preprocess(x, y):
+        return tf.image.resize(tf.cast(x, tf.float32) / 127.5 - 1, (32, 32))
 
-  # Return numpy arrays instead of TF tensors while iterating
-  return tfds.as_numpy(train_ds)
+    # Normalize to [-1, 1], shuffle and batch
+    train_ds = train_ds.map(preprocess, tf.data.AUTOTUNE)
+    train_ds = train_ds.shuffle(5000).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+    # Return numpy arrays instead of TF tensors while iterating
+    return tfds.as_numpy(train_ds)
 
 def forward_noising_1(key, x, t):
-  noise = jax.random.normal(key, x.shape)
-  alpha_hat_t = jnp.take(alpha_bar, t)
-  alpha_hat_t = jnp.reshape(alpha_hat_t, (-1, 1, 1, 1))
-  noisy_img = noise * jnp.sqrt(1 - alpha_hat_t) + x * jnp.sqrt(alpha_hat_t)
-  return noisy_img, noise
+    """
+    Applies forward noising to the input image `x` based
+    on the diffusion coefficient `alpha_hat_t` at time `t`.
+
+    Args:
+    key: A JAX random key for generating noise.
+    x: The input image.
+    t: The time step.
+
+    Returns:
+    A tuple containing the noisy image and the generated noise.
+    """
+    noise = jax.random.normal(key, x.shape)
+    alpha_hat_t = jnp.take(alpha_bar, t)
+    alpha_hat_t = jnp.reshape(alpha_hat_t, (-1, 1, 1, 1))
+    noisy_img = noise * jnp.sqrt(1 - alpha_hat_t) + x * jnp.sqrt(alpha_hat_t)
+    return noisy_img, noise
 
 def forward_noising_2(key, x_0, t):
-  noise = random.normal(key, x_0.shape)
-  reshaped_sqrt_alpha_bar_t = jnp.reshape(jnp.take(sqrt_alpha_bar, t), (-1, 1, 1, 1))
-  reshaped_one_minus_sqrt_alpha_bar_t = jnp.reshape(jnp.take(one_minus_sqrt_alpha_bar, t), (-1, 1, 1, 1))
-  noisy_image = reshaped_sqrt_alpha_bar_t  * x_0 + reshaped_one_minus_sqrt_alpha_bar_t  * noise
-  return noisy_image, noise
+    """
+    Applies forward noising to the input image.
+
+    Args:
+    key: The random key used for generating noise.
+    x_0: The input image.
+    t: The time step.
+
+    Returns:
+    noisy_image: The image with forward noising applied.
+    noise: The generated noise.
+    """
+    noise = random.normal(key, x_0.shape)
+    reshaped_sqrt_alpha_bar_t = jnp.reshape(jnp.take(sqrt_alpha_bar, t), (-1, 1, 1, 1))
+    reshaped_one_minus_sqrt_alpha_bar_t = jnp.reshape(
+                                                      jnp.take(one_minus_sqrt_alpha_bar, t), 
+                                                      (-1, 1, 1, 1)
+                                                      )
+    noisy_image = reshaped_sqrt_alpha_bar_t  * x_0 + reshaped_one_minus_sqrt_alpha_bar_t  * noise
+    return noisy_image, noise
 
 # Train step:
-def loss_fn(model: UNet, noisy_image: jax.Array, noise:jax.Array, timestep: int):
-  pred_noise = model([noisy_image, timestep])
-  loss = jnp.mean((noise - pred_noise) ** 2)
-  return loss
+def loss_fn(model: UNet, noisy_image: jax.Array, noise: jax.Array, timestep: int):
+    """
+    Calculates the loss between the predicted noise and the actual noise.
+
+    Args:
+    model (UNet): The UNet model used for prediction.
+    noisy_image (jax.Array): The input noisy image.
+    noise (jax.Array): The actual noise.
+    timestep (int): The timestep of the prediction.
+
+    Returns:
+    float: The calculated loss.
+    """
+    pred_noise = model([noisy_image, timestep])
+    loss = jnp.mean((noise - pred_noise) ** 2)
+    return loss
+
 
 @nnx.jit
-def train_step(model: UNet, optimizer: nnx.Optimizer,  noisy_images: jax.Array, noise:jax.Array, timestep: jax.Array):
-  """Train for a single step."""
-  grad_fn = nnx.value_and_grad(loss_fn)
-  loss, grads = grad_fn(model, noisy_images, noise, timestep)
-  optimizer.update(grads)
-  return grads, loss
+def train_step(model: UNet, 
+               optimizer: nnx.Optimizer,  
+               noisy_images: jax.Array,
+               noise: jax.Array, 
+               timestep: jax.Array):
+    """
+    Train for a single step.
+
+    Args:
+    model (UNet): The UNet model.
+    optimizer (nnx.Optimizer): The optimizer.
+    noisy_images (jax.Array): The noisy images.
+    noise (jax.Array): The noise.
+    timestep (jax.Array): The timestep.
+
+    Returns:
+    Tuple: The gradients and the loss.
+    """
+    grad_fn = nnx.value_and_grad(loss_fn)
+    loss, grads = grad_fn(model, noisy_images, noise, timestep)
+    optimizer.update(grads)
+    return grads, loss
 
 
 # Define the training epoch
-def train_epoch(epoch_num, model: UNet, optimizer:nnx.Optimizer, train_ds, batch_size, rng):
+def train_epoch(model: UNet, optimizer:nnx.Optimizer, train_ds, rng):
+    """
+    Trains the model for one epoch.
 
-  epoch_loss = []
+    Args:
+        model (UNet): The model to be trained.
+        optimizer (nnx.Optimizer): The optimizer used for training.
+        train_ds: The training dataset.
+        rng: The random number generator.
 
-  for index, batch_images in enumerate(tqdm(train_ds)):
-    rng, tsrng = random.split(rng)
-    # print(batch_images.shape)
+    Returns:
+        float: The average training loss for the epoch.
+    """
 
-    # Generate timestamps for this batch
-    timestamps = random.randint(tsrng,
-                                shape=(batch_images.shape[0]),
-                                minval = 0,
-                                maxval=timesteps
+    epoch_loss = []
+
+    for index, batch_images in enumerate(tqdm(train_ds)):
+        rng, tsrng = random.split(rng)
+
+        # Generate timestamps for this batch
+        timestamps = random.randint(tsrng,
+                                    shape=(batch_images.shape[0]),
+                                    minval = 0,
+                                    maxval=timesteps
+                                    )
+
+        # Generating the noise and noisy image for this batch:
+        noisy_images, noise = forward_noising_1(rng, batch_images, timestamps)
+
+        # Get loss and gradients:
+        _, loss = train_step(model,
+                                    optimizer,
+                                    noisy_images=noisy_images,
+                                    noise=noise,
+                                    timestep=timestamps
                                 )
 
-    # Generating the noise and noisy image for this batch:
-    noisy_images, noise = forward_noising_1(rng, batch_images, timestamps)
-    # print(noisy_images.shape)
-    # print(f'noise shape : {noise.shape}')
-    # Get loss and gradients:
-    grads, loss = train_step(model,
-                             optimizer,
-                             noisy_images=noisy_images,
-                             noise=noise,
-                             timestep=timestamps
-                            )
+        # Update the model:
+        epoch_loss.append(loss)
+        if index % 10 == 0:
+            print(f'loss after step {index} : {loss}')
 
-    # Update the model:
-    epoch_loss.append(loss)
-    if index % 10 == 0:
-      print(f'loss after step {index} : {loss}')
-
-  train_loss = np.mean(epoch_loss)
-  return train_loss
+    train_loss = np.mean(epoch_loss)
+    return train_loss
 
 
 def train(train_ds,
@@ -117,67 +184,34 @@ def train(train_ds,
           optimizer:nnx.Optimizer,
           ckpt_manager: ocp.CheckpointManager,
           init_epoch: int = 0):
+    """
+    Trains the model on the given dataset for a specified number of epochs.
 
-  rng = jax.random.PRNGKey(0)
-  rng, init_rng = jax.random.split(rng)
+    Args:
+        train_ds: The training dataset.
+        model: The UNet model to train.
+        optimizer: The optimizer used for training.
+        ckpt_manager: The checkpoint manager for saving model checkpoints.
+        init_epoch: The initial epoch number (default is 0).
 
+    Returns:
+        The final training loss.
 
-  # if resume_state is not None:
-  #   state = resume_state
-  #   print('resuming from a previously trained state.')
-  # else:
-  #   state = create_train_state(init_rng)
-  # print(jax.tree.map(jnp.shape, state.params))
-  train_loss = 0
-  for i in range(init_epoch, NUM_EPOCHS):
+    """
+    rng = jax.random.PRNGKey(0)
 
-    rng, input_rng = jax.random.split(rng)
+    train_loss = 0
+    for i in range(init_epoch, NUM_EPOCHS):
 
-    train_loss = train_epoch(i, model, optimizer, train_ds, BATCH_SIZE, input_rng)
-    print(f'Train loss after epoch {i} :{train_loss}')
-    # log_states.append(state)
-    # saving checkpoint:
-    _,state = nnx.split(model)
-    metadata = {'epoch':i}
-    ckpt_manager.save(i, args=ocp.args.Composite(state=ocp.args.StandardSave(state), extra_metadata=ocp.args.JsonSave(metadata)))
+        rng, input_rng = jax.random.split(rng)
 
-
-  return train_loss
-
-
-# Enable checkpointing:
-ckpt_dir = '~/checkpoints'
-options = ocp.CheckpointManagerOptions(max_to_keep=2, create=True)
-ckpt_manager = ocp.CheckpointManager(ckpt_dir, options=options)
-# TBD: Fix loading from saved ckpt
-restored_state = None
-epoch = 0
-
-if ckpt_manager.latest_step() is not None:
-  # load from the latest checkpoint
-  latest_step = ckpt_manager.latest_step()
-  print(f'found checkpoint at step {latest_step}')
-  abstract_model = nnx.eval_shape(lambda: UNet(out_features=32, rngs=nnx.Rngs(0), num_channels=1))
-  graphdef, abstract_state = nnx.split(abstract_model)
-
-  restored = ckpt_manager.restore(latest_step, args=ocp.args.Composite(state=ocp.args.StandardRestore(abstract_state),
-                                                                       extra_metadata=ocp.args.JsonRestore()))
-  restored_state = restored.state
-  metadata = restored.extra_metadata
-  epoch = metadata['epoch'] + 1
-  model = nnx.merge(graphdef, restored_state)
-  # epoch = restored_ckpt['epoch']
-  print(f' loaded from the latest step: {latest_step}')
-
-# Initiate Training
-train_ds = get_datasets(BATCH_SIZE)
-model = UNet(out_features=32, rngs=nnx.Rngs(0), num_channels=1)
-optimizer = nnx.Optimizer(model, optax.adam(1e-4))
-trained_state = train(train_ds,
-                      model,
-                      optimizer,
-                      ckpt_manager,
-                      epoch)
+        train_loss = train_epoch(model, optimizer, train_ds, input_rng)
+        print(f'Train loss after epoch {i} :{train_loss}')
+        # saving checkpoint:
+        _,state = nnx.split(model)
+        metadata = {'epoch':i}
+        ckpt_manager.save(i, args=ocp.args.Composite(state=ocp.args.StandardSave(state), extra_metadata=ocp.args.JsonSave(metadata)))
+        ckpt_manager.wait_until_finished()
 
 
-
+    return train_loss

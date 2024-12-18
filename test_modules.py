@@ -1,12 +1,19 @@
-import jax
+"""Unit tests for modules."""
+import unittest
 import jax.numpy as jnp
 from flax import nnx
-import unittest
 from modules import SinusoidalEmbedding_, TimeEmbedding_, Attn, Block, ResNetBlock, UNet
 
+
 class TestSinusoidalEmbedding(unittest.TestCase):
+    """
+    Unit tests for the SinusoidalEmbedding class.
+    """
 
     def test_call(self):
+        """
+        Test the call method of the SinusoidalEmbedding class.
+        """
         dim = 32
         embedding = SinusoidalEmbedding_(dim=dim)
         inputs = jnp.ones((10, 20))
@@ -14,8 +21,21 @@ class TestSinusoidalEmbedding(unittest.TestCase):
         self.assertEqual(output.shape, (10, 20, dim))
 
 class TestTimeEmbedding(unittest.TestCase):
+    """
+    Unit tests for the TimeEmbedding_ class.
+    """
 
     def test_call(self):
+        """
+        Test the call method of the TimeEmbedding_ class.
+
+        This method tests the functionality of the call method in the TimeEmbedding_ class.
+        It creates an instance of the TimeEmbedding_ class, passes some inputs to it, and
+        checks if the output has the expected shape.
+
+        Returns:
+            None
+        """
         dim = 32
         rngs = nnx.Rngs(0)
         time_embedding = TimeEmbedding_(rngs=rngs, dim=dim)
@@ -24,8 +44,21 @@ class TestTimeEmbedding(unittest.TestCase):
         self.assertEqual(output.shape, (10, 20, dim * 4))
 
 class TestAttn(unittest.TestCase):
+    """
+    Unit tests for the Attn class.
+    """
 
     def test_call(self):
+        """
+        Test the `call` method of the `Attn` class.
+
+        This method creates an instance of the `Attn` 
+        class and calls its `call` method with some inputs.
+        It then asserts that the output shape is as expected.
+
+        Returns:
+            None
+        """
         in_features = 32
         dim = 32
         num_heads = 4
@@ -36,8 +69,21 @@ class TestAttn(unittest.TestCase):
         self.assertEqual(output.shape, (10, 20, in_features))
 
 class TestBlock(unittest.TestCase):
+    """
+    Unit tests for the `Block` class.
+    """
 
     def test_call(self):
+        """
+        Test the `call` method of the `Block` class.
+
+        This method creates an instance of the `Block` class and tests its 
+        `call` method by passing in a tensor of ones as input.
+        It then asserts that the output shape matches the expected shape.
+
+        Returns:
+            None
+        """
         in_features = 32
         out_features = 64
         rngs = nnx.Rngs(0)
@@ -47,8 +93,21 @@ class TestBlock(unittest.TestCase):
         self.assertEqual(output.shape, (10, 20, out_features))
 
 class TestResNetBlock(unittest.TestCase):
+    """
+    Unit tests for the ResNetBlock class.
+    """
 
     def test_call(self):
+        """
+        Test the `call` method of the ResNetBlock class.
+
+        This method creates an instance of the ResNetBlock class and tests its 
+        `call` method by passing in some inputs and a time embedding.
+        It then asserts that the shape of the output matches the expected shape.
+
+        Returns:
+            None
+        """
         in_features = 32
         out_features = 64
         rngs = nnx.Rngs(0)
@@ -59,15 +118,34 @@ class TestResNetBlock(unittest.TestCase):
         self.assertEqual(output.shape, (10, 20, 30, out_features))
 
 class TestUNet(unittest.TestCase):
+    """
+    Unit tests for the UNet class.
+    """
 
     def test_call(self):
+        """
+        Test the `call` method of the UNet class.
+
+        This method creates an instance of the UNet class and calls its `call` method with some inputs.
+        It then asserts that the output shape is as expected.
+
+        Returns:
+            None
+        """
         rngs = nnx.Rngs(0)
         num_channels = 3
         out_features = 64
         num_groups = 8
         num_heads = 4
         dim_scale_factor = (1, 2, 4, 8)
-        unet = UNet(rngs=rngs, num_channels=num_channels, out_features=out_features, num_groups=num_groups, num_heads=num_heads, dim_scale_factor=dim_scale_factor)
+        unet = UNet(
+            rngs=rngs, 
+            num_channels=num_channels, 
+            out_features=out_features, 
+            num_groups=num_groups, 
+            num_heads=num_heads, 
+            dim_scale_factor=dim_scale_factor
+            )
         inputs = jnp.ones((10, 16, 16, num_channels))
         time = jnp.ones((10,))
         output = unet((inputs, time))
