@@ -1,4 +1,5 @@
 """Training file for simple diffusion model."""
+from typing import Tuple
 from flax import nnx
 import jax
 import jax.numpy as jnp
@@ -133,7 +134,7 @@ def train_step(model: UNet,
 
 
 # Define the training epoch
-def train_epoch(model: UNet, optimizer:nnx.Optimizer, train_ds, rng):
+def train_epoch(model: UNet, optimizer:nnx.Optimizer, train_ds, rng, timesteps=200):
     """
     Trains the model for one epoch.
 
@@ -183,7 +184,8 @@ def train(train_ds,
           model:UNet,
           optimizer:nnx.Optimizer,
           ckpt_manager: ocp.CheckpointManager,
-          init_epoch: int = 0):
+          init_epoch: int = 0,
+          timesteps: int = 200):
     """
     Trains the model on the given dataset for a specified number of epochs.
 
@@ -199,19 +201,45 @@ def train(train_ds,
 
     """
     rng = jax.random.PRNGKey(0)
-
     train_loss = 0
     for i in range(init_epoch, NUM_EPOCHS):
-
         rng, input_rng = jax.random.split(rng)
-
-        train_loss = train_epoch(model, optimizer, train_ds, input_rng)
+        train_loss = train_epoch(model, optimizer, train_ds, input_rng, timesteps)
         print(f'Train loss after epoch {i} :{train_loss}')
         # saving checkpoint:
-        _,state = nnx.split(model)
-        metadata = {'epoch':i}
-        ckpt_manager.save(i, args=ocp.args.Composite(state=ocp.args.StandardSave(state), extra_metadata=ocp.args.JsonSave(metadata)))
+        _, state = nnx.split(model)
+        metadata = {'epoch': i}
+        ckpt_manager.save(i, 
+                          args=ocp.args.Composite(state=ocp.args.StandardSave(state), 
+                                                 extra_metadata=ocp.args.JsonSave(metadata)))
         ckpt_manager.wait_until_finished()
 
-
     return train_loss
+
+
+def load_checkpoint(ckpt_manager: ocp.CheckpointManager, model: UNet) -> Tuple[UNet, int]:
+    """Loads the latest checkpoint from the checkpoint manager and restores the model.
+
+    Args:
+        ckpt_manager (ocp.CheckpointManager): The checkpoint manager.
+        model (UNet): The UNet model.
+
+    Returns:
+        Tuple[UNet, int]: The loaded model and the epoch number.
+    """
+    latest_step = ckpt_manager.latest_step()
+    print(f'Found checkpoint at step {latest_step}')
+    abstract_model = nnx.eval_shape(lambda: model)
+    graphdef, abstract_state = nnx.split(abstract_model)
+
+    restored = ckpt_manager.restore(latest_step,
+                                    args=ocp.args.Composite(state=ocp.args.StandardRestore(abstract_state),
+                                                            extra_metadata=ocp.args.JsonRestore()))
+    restored_state = restored.state
+    metadata = restored.extra_metadata
+    epoch = metadata['epoch'] + 1
+    loaded_model = nnx.merge(graphdef, restored_state)
+
+    print(f'Loaded from the latest step: {latest_step}')
+
+    return loaded_model, epoch
