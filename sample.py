@@ -1,4 +1,5 @@
 """Sample from the model."""
+import argparse
 import os
 import random as r
 from tqdm import tqdm
@@ -44,11 +45,9 @@ def backward_denoising_ddpm(x_t, pred_noise, t, alpha, alpha_bar, beta):
 #TODO: Add ddim
 
 
-def main():
+def main(checkpoint_dir:str, samples_dir:str):
     """Main function for running the sample code."""
-    ## STEP 1: Load the model
-    checkpoint_dir = '/tmp/checkpoints'
-    samples_dir = "/tmp/samples"
+    ## STEP 1: Load the model from the checkpoint
     checkpoint_manager = ocp.CheckpointManager(checkpoint_dir)
 
     assert checkpoint_manager.latest_step() is not None, 'No checkpoint found.'
@@ -57,8 +56,11 @@ def main():
         checkpoint_manager,
         UNet(out_features=32, rngs=nnx.Rngs(0), num_channels=1)
     )
-    print(f'Loaded from the epoch: {epoch}')
 
+    # STEP 2: Ensure the samples diretory exists:
+    os.makedirs(samples_dir, exist_ok=True)
+
+    # STEP 3: Run the sampling code
 
     ##################### CLEAN THIS SECTION #####################:
     timesteps = 200
@@ -94,3 +96,11 @@ def main():
     # Display the final generated image:
     plt.imshow(jnp.squeeze(x, (0, -1)), cmap = 'gray')
     plt.savefig(os.path.join(samples_dir, 'ddpm_sample_final.png'))
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--checkpoint_dir', type=str, default='/tmp/checkpoints')
+    parser.add_argument('--samples_dir', type=str, default='/tmp/samples')
+    args = parser.parse_args()
+
+    main(args.checkpoint_dir, args.samples_dir)
