@@ -24,10 +24,11 @@ def main(batcgh_size:int, checkpoint_dir:str):
             UNet(out_features=32, rngs=nnx.Rngs(0), num_channels=1)
         )
         print(f'Loaded from the epoch: {epoch}')
+    else:
+        model = UNet(out_features=32, rngs=nnx.Rngs(0), num_channels=1)
 
     # Initiate Training
     train_ds = get_datasets(batcgh_size)
-    model = UNet(out_features=32, rngs=nnx.Rngs(0), num_channels=1)
     optimizer = nnx.Optimizer(model, optax.adam(1e-4))
     train(train_ds, model, optimizer, checkpoint_manager, epoch)
 
