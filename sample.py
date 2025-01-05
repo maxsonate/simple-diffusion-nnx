@@ -41,7 +41,6 @@ def backward_denoising_ddpm(x_t, pred_noise, t, alpha, alpha_bar, beta):
     ret = 1 / jnp.sqrt(alpha_t) * (x_t - mean) + (var ** 0.5) * z
     return ret
 
-#TODO: Add argparse
 #TODO: Add ddim
 
 
@@ -52,7 +51,7 @@ def main(checkpoint_dir:str, samples_dir:str):
 
     assert checkpoint_manager.latest_step() is not None, 'No checkpoint found.'
 
-    model, epoch = load_checkpoint(
+    model, _ = load_checkpoint(
         checkpoint_manager,
         UNet(out_features=32, rngs=nnx.Rngs(0), num_channels=1)
     )
@@ -62,7 +61,7 @@ def main(checkpoint_dir:str, samples_dir:str):
 
     # STEP 3: Run the sampling code
 
-    ##################### CLEAN THIS SECTION #####################:
+    ##################### CLEAN THIS SECTION #####################
     timesteps = 200
     beta = jnp.linspace(0.0001, 0.02, timesteps)
     alpha = 1 - beta
