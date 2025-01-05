@@ -15,11 +15,6 @@ from modules import UNet
 # Prevent TFDS from using GPU
 tf.config.experimental.set_visible_devices([], 'GPU')
 
-# Defining some hyperparameters
-NUM_EPOCHS = 10
-BATCH_SIZE = 64
-NUM_STEPS_PER_EPOCH = 60000//BATCH_SIZE # MNIST has 60,000 training samples
-
 ##################### CLEAN THIS SECTION #####################:
 timesteps = 200
 beta = jnp.linspace(0.0001, 0.02, timesteps)
@@ -176,6 +171,7 @@ def train_epoch(model: UNet, optimizer:nnx.Optimizer, train_ds, rng, timesteps=2
         if index % 10 == 0:
             print(f'loss after step {index} : {loss}')
 
+
     train_loss = np.mean(epoch_loss)
     return train_loss
 
@@ -185,6 +181,7 @@ def train(train_ds,
           optimizer:nnx.Optimizer,
           ckpt_manager: ocp.CheckpointManager,
           init_epoch: int = 0,
+          num_epochs: int = 10,
           timesteps: int = 200):
     """
     Trains the model on the given dataset for a specified number of epochs.
@@ -202,18 +199,19 @@ def train(train_ds,
     """
     rng = jax.random.PRNGKey(0)
     train_loss = 0
-    for i in range(init_epoch, NUM_EPOCHS):
+
+    for i in range(init_epoch, num_epochs):
         rng, input_rng = jax.random.split(rng)
         train_loss = train_epoch(model, optimizer, train_ds, input_rng, timesteps)
         print(f'Train loss after epoch {i} :{train_loss}')
         # saving checkpoint:
         _, state = nnx.split(model)
         metadata = {'epoch': i}
-        ckpt_manager.save(i, 
+        ckpt_manager.save(i,
                           args=ocp.args.Composite(state=ocp.args.StandardSave(state), 
                                                  extra_metadata=ocp.args.JsonSave(metadata)))
         ckpt_manager.wait_until_finished()
-
+        print(f'Checkpoint saved at epoch {i}')
     return train_loss
 
 
@@ -232,9 +230,13 @@ def load_checkpoint(ckpt_manager: ocp.CheckpointManager, model: UNet) -> Tuple[U
     abstract_model = nnx.eval_shape(lambda: model)
     graphdef, abstract_state = nnx.split(abstract_model)
 
-    restored = ckpt_manager.restore(latest_step,
-                                    args=ocp.args.Composite(state=ocp.args.StandardRestore(abstract_state),
-                                                            extra_metadata=ocp.args.JsonRestore()))
+    restored = ckpt_manager.restore(
+        latest_step,
+        args=ocp.args.Composite(
+            state=ocp.args.StandardRestore(abstract_state),
+            extra_metadata=ocp.args.JsonRestore()
+        )
+    )
     restored_state = restored.state
     metadata = restored.extra_metadata
     epoch = metadata['epoch'] + 1
