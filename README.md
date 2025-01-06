@@ -45,6 +45,7 @@ Train loss after epoch 9 :0.04927600920200348
 
 # Sampling
 
+## DDPM Sampling
 From the Kaggle implementation (https://www.kaggle.com/code/darshan1504/exploring-diffusion-models-with-jax?scriptVersionId=98957007&cellId=30):
 
 After completing the training process, we must define an inference loop that can generate new samples for us when provided with Gaussian noise as input. The general algorithm for sampling is given as follows:
@@ -86,9 +87,12 @@ Following are the images generated through the backward denoising (every 25 step
 
 
 
-# TODOs
-- Add DDIM sampling
+## DDIM (Denosing Diffusion Implicit Models) Sampling
+
+DDIM, proposed in [Denoising Diffusion Implicit Models](https://arxiv.org/abs/2010.02502), introduces a non-Markovian denoising method, hence, not required conditioning on the image generated at the previous step. This removes the requirement to go through all the steps during the inference. More information about DDIM sampling can be found in the original Kaggle link [here](https://www.kaggle.com/code/darshan1504/exploring-diffusion-models-with-jax?scriptVersionId=98957007&cellId=36).
 
 
 
+To perform DDIM sample:
 
+python sample.py --checkpoint_dir=<path_to_checkponts> --samples_dir=<path_to_save_imgages> --sampling_type=ddim
