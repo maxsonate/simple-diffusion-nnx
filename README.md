@@ -1,21 +1,21 @@
 # Simple Image Diffusion in NNX
 A simple image diffusion model in NNX. NNX is a JAX-based neural network library designed for simplicity and power. Its modular approach follows standard Python conventions, making it both intuitive and compatible with the broader JAX ecosystem. Please note that NNX is experimental and subject to change.
 
-For more information regarding NNX, please refer to https://flax.readthedocs.io/en/v0.8.3/experimental/nnx/index.html
+For more information regarding NNX, please refer to [NNX documentation](https://flax.readthedocs.io/en/v0.8.3/experimental/nnx/index.html)
 
 This work was inspired and derived from the implementation of image diffusion model tutorial of Kaggle, originally in Jax. For more information, please refer to the following:
 https://www.kaggle.com/code/darshan1504/exploring-diffusion-models-with-jax
 
 
 # Backbone
-A modified version of the U-Net (https://arxiv.org/abs/1505.04597) that uses ResNet blocks instead of simple convolutional blocks. This U-Net will incorporate the time embedding and an additional attention mechanism in every block.
+A modified version of the [U-Net](https://arxiv.org/abs/1505.04597) that uses ResNet blocks instead of simple convolutional blocks. This U-Net will incorporate time embedding and an additional attention mechanism in every block.
 
 
 # Training
 
 ## Training Loop
 
-From the Kaggle implementation (https://www.kaggle.com/code/darshan1504/exploring-diffusion-models-with-jax?scriptVersionId=98957007&cellId=20):
+From the [Kaggle implementation](https://www.kaggle.com/code/darshan1504/exploring-diffusion-models-with-jax?scriptVersionId=98957007&cellId=20):
 
 The standard equation for the backward pass can be given as:
 
@@ -46,7 +46,7 @@ Train loss after epoch 9 :0.04927600920200348
 # Sampling
 
 ## DDPM Sampling
-From the Kaggle implementation (https://www.kaggle.com/code/darshan1504/exploring-diffusion-models-with-jax?scriptVersionId=98957007&cellId=30):
+From the [Kaggle implementation](https://www.kaggle.com/code/darshan1504/exploring-diffusion-models-with-jax?scriptVersionId=98957007&cellId=30):
 
 After completing the training process, we must define an inference loop that can generate new samples for us when provided with Gaussian noise as input. The general algorithm for sampling is given as follows:
 
@@ -96,3 +96,19 @@ DDIM, proposed in [Denoising Diffusion Implicit Models](https://arxiv.org/abs/20
 To perform DDIM sample:
 
 python sample.py --checkpoint_dir=<path_to_checkponts> --samples_dir=<path_to_save_imgages> --sampling_type=ddim
+
+Following are the images generated through the backward denoising DDIM inference (every 20 steps):
+![ddim_sample_180](https://github.com/user-attachments/assets/aa2560e4-4986-4393-b82b-4cd6e7451547)
+![ddim_sample_160](https://github.com/user-attachments/assets/b120e6c8-7ce4-42e3-b2cb-a284a148f9b7)
+![ddim_sample_140](https://github.com/user-attachments/assets/0f06ab86-f138-4a8e-b739-80638a13c218)
+![ddim_sample_120](https://github.com/user-attachments/assets/490d7dc3-fa44-4084-b5c8-f693cdd35313)
+![ddim_sample_100](https://github.com/user-attachments/assets/24f2efb6-237e-477c-a1dd-f32ded256dec)
+![ddim_sample_80](https://github.com/user-attachments/assets/8df25231-be3d-4368-b74e-1e366dbdbee4)
+![ddim_sample_60](https://github.com/user-attachments/assets/43077f33-851e-4fa2-8407-d2a60fae6c8d)
+![ddim_sample_40](https://github.com/user-attachments/assets/d1c19209-bbd7-4bf8-bc5d-d896e9650ce5)
+![ddim_sample_20](https://github.com/user-attachments/assets/7046cbda-e784-4c9a-892f-251c186d443c)
+![ddim_sample_0](https://github.com/user-attachments/assets/d67ca929-504e-4b29-a7de-adfb6e52d147)
+
+
+
+
