@@ -15,16 +15,6 @@ from modules import UNet
 # Prevent TFDS from using GPU
 tf.config.experimental.set_visible_devices([], 'GPU')
 
-##################### CLEAN THIS SECTION #####################:
-timesteps = 200
-beta = jnp.linspace(0.0001, 0.02, timesteps)
-alpha = 1 - beta
-alpha_bar = jnp.cumprod(alpha, 0)
-alpha_bar = jnp.concatenate((jnp.array([1.]), alpha_bar[:-1]), axis=0)
-sqrt_alpha_bar = jnp.sqrt(alpha_bar)
-one_minus_sqrt_alpha_bar = jnp.sqrt(1 - alpha_bar)
-###############################################################
-
  # Load MNIST dataset
 
 def get_datasets(batch_size: int):
@@ -43,7 +33,7 @@ def get_datasets(batch_size: int):
     # Return numpy arrays instead of TF tensors while iterating
     return tfds.as_numpy(train_ds)
 
-def forward_noising_1(key, x, t):
+def forward_noising(key, x, t, timesteps:int=200):
     """
     Applies forward noising to the input image `x` based
     on the diffusion coefficient `alpha_hat_t` at time `t`.
@@ -56,33 +46,17 @@ def forward_noising_1(key, x, t):
     Returns:
     A tuple containing the noisy image and the generated noise.
     """
+
+    beta = jnp.linspace(0.0001, 0.02, timesteps)
+    alpha = 1 - beta
+    alpha_bar = jnp.cumprod(alpha, 0)
+    alpha_bar = jnp.concatenate((jnp.array([1.]), alpha_bar[:-1]), axis=0)
+
     noise = jax.random.normal(key, x.shape)
     alpha_hat_t = jnp.take(alpha_bar, t)
     alpha_hat_t = jnp.reshape(alpha_hat_t, (-1, 1, 1, 1))
     noisy_img = noise * jnp.sqrt(1 - alpha_hat_t) + x * jnp.sqrt(alpha_hat_t)
     return noisy_img, noise
-
-def forward_noising_2(key, x_0, t):
-    """
-    Applies forward noising to the input image.
-
-    Args:
-    key: The random key used for generating noise.
-    x_0: The input image.
-    t: The time step.
-
-    Returns:
-    noisy_image: The image with forward noising applied.
-    noise: The generated noise.
-    """
-    noise = random.normal(key, x_0.shape)
-    reshaped_sqrt_alpha_bar_t = jnp.reshape(jnp.take(sqrt_alpha_bar, t), (-1, 1, 1, 1))
-    reshaped_one_minus_sqrt_alpha_bar_t = jnp.reshape(
-                                                      jnp.take(one_minus_sqrt_alpha_bar, t), 
-                                                      (-1, 1, 1, 1)
-                                                      )
-    noisy_image = reshaped_sqrt_alpha_bar_t  * x_0 + reshaped_one_minus_sqrt_alpha_bar_t  * noise
-    return noisy_image, noise
 
 # Train step:
 def loss_fn(model: UNet, noisy_image: jax.Array, noise: jax.Array, timestep: int):
@@ -156,7 +130,7 @@ def train_epoch(model: UNet, optimizer:nnx.Optimizer, train_ds, rng, timesteps=2
                                     )
 
         # Generating the noise and noisy image for this batch:
-        noisy_images, noise = forward_noising_1(rng, batch_images, timestamps)
+        noisy_images, noise = forward_noising(rng, batch_images, timestamps)
 
         # Get loss and gradients:
         _, loss = train_step(model,
